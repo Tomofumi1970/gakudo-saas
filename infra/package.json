@@ -1,0 +1,31 @@
+{
+  "name": "gakudo-saas-infra",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Gakudo SaaS infrastructure (AWS CDK)",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "jest",
+    "synth:stg": "cdk synth --context env=stg",
+    "synth:prod": "cdk synth --context env=prod",
+    "diff:stg": "cdk diff --context env=stg",
+    "diff:prod": "cdk diff --context env=prod",
+    "deploy:stg": "cdk deploy --context env=stg --all",
+    "deploy:prod": "cdk deploy --context env=prod --all",
+    "cdk": "cdk"
+  },
+  "devDependencies": {
+    "@types/jest": "^30",
+    "@types/node": "^24.10.1",
+    "jest": "^30",
+    "ts-jest": "^29",
+    "aws-cdk": "2.1121.0",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.9.3"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.252.0",
+    "constructs": "^10.5.0"
+  }
+}
