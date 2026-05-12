@@ -25,6 +25,8 @@ export class DatabaseStack extends cdk.Stack {
   public readonly itemCatalogTable: dynamodb.Table;
   public readonly ledgerTable: dynamodb.Table;
   public readonly invoicesTable: dynamodb.Table;
+  public readonly eventsTable: dynamodb.Table;
+  public readonly eventParticipantsTable: dynamodb.Table;
 
   constructor(scope: Construct, id: string, props: DatabaseStackProps) {
     super(scope, id, props);
@@ -184,6 +186,36 @@ export class DatabaseStack extends cdk.Stack {
         type: dynamodb.AttributeType.STRING,
       },
       sortKey: { name: 'status', type: dynamodb.AttributeType.STRING },
+    });
+
+    // Events: イベント(キャンプ・夏まつり等)
+    // PK: org_id, SK: event_id
+    // GSI1: status + event_date (開催予定/未精算の一覧)
+    this.eventsTable = new dynamodb.Table(this, 'EventsTable', {
+      tableName: `${prefix}-events`,
+      partitionKey: { name: 'org_id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'event_id', type: dynamodb.AttributeType.STRING },
+      ...common,
+    });
+    this.eventsTable.addGlobalSecondaryIndex({
+      indexName: 'gsi1-status-date',
+      partitionKey: { name: 'status', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'event_date', type: dynamodb.AttributeType.STRING },
+    });
+
+    // EventParticipants: 参加者と見込み/実費按分結果
+    // PK: org_id#event_id, SK: member_id
+    // GSI1: member_id + event_date (個人の参加履歴)
+    this.eventParticipantsTable = new dynamodb.Table(this, 'EventParticipantsTable', {
+      tableName: `${prefix}-event-participants`,
+      partitionKey: { name: 'org_event', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'member_id', type: dynamodb.AttributeType.STRING },
+      ...common,
+    });
+    this.eventParticipantsTable.addGlobalSecondaryIndex({
+      indexName: 'gsi1-member-date',
+      partitionKey: { name: 'member_id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'event_date', type: dynamodb.AttributeType.STRING },
     });
 
     new cdk.CfnOutput(this, 'OrganizationsTableName', {

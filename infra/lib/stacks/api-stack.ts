@@ -16,6 +16,8 @@ export interface ApiStackTables {
   itemCatalog: dynamodb.Table;
   ledger: dynamodb.Table;
   invoices: dynamodb.Table;
+  events: dynamodb.Table;
+  eventParticipants: dynamodb.Table;
 }
 
 export interface ApiStackProps extends cdk.StackProps {
@@ -166,6 +168,46 @@ export class ApiStack extends cdk.Stack {
       access: { read: ['households', 'invoices'] },
     });
 
+    // === Phase 3: イベントと実費按分 ===
+
+    this.registerEndpoint({
+      id: 'EventsCreateFn',
+      handler: 'handlers.events.create.handler',
+      resourcePath: ['events'],
+      method: 'POST',
+      access: { write: ['events', 'auditLog'] },
+    });
+
+    this.registerEndpoint({
+      id: 'EventsListFn',
+      handler: 'handlers.events.list.handler',
+      resourcePath: ['events'],
+      method: 'GET',
+      access: { read: ['events'] },
+    });
+
+    this.registerEndpoint({
+      id: 'EventsRegisterParticipantsFn',
+      handler: 'handlers.events.register_participants.handler',
+      resourcePath: ['events', '{event_id}', 'participants'],
+      method: 'POST',
+      access: {
+        read: ['events'],
+        write: ['events', 'eventParticipants', 'auditLog'],
+      },
+    });
+
+    this.registerEndpoint({
+      id: 'EventsSettleFn',
+      handler: 'handlers.events.settle.handler',
+      resourcePath: ['events', '{event_id}', 'settle'],
+      method: 'POST',
+      access: {
+        read: ['eventParticipants'],
+        write: ['events', 'eventParticipants', 'ledger', 'auditLog'],
+      },
+    });
+
     new cdk.CfnOutput(this, 'ApiUrl', { value: this.api.url });
   }
 
@@ -194,6 +236,8 @@ export class ApiStack extends cdk.Stack {
         ITEM_CATALOG_TABLE: this.tables.itemCatalog.tableName,
         LEDGER_TABLE: this.tables.ledger.tableName,
         INVOICES_TABLE: this.tables.invoices.tableName,
+        EVENTS_TABLE: this.tables.events.tableName,
+        EVENT_PARTICIPANTS_TABLE: this.tables.eventParticipants.tableName,
       },
       timeout: cdk.Duration.seconds(10),
       memorySize: 256,
