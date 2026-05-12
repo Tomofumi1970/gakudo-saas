@@ -13,6 +13,9 @@ export interface ApiStackTables {
   households: dynamodb.Table;
   members: dynamodb.Table;
   auditLog: dynamodb.Table;
+  itemCatalog: dynamodb.Table;
+  ledger: dynamodb.Table;
+  invoices: dynamodb.Table;
 }
 
 export interface ApiStackProps extends cdk.StackProps {
@@ -115,6 +118,54 @@ export class ApiStack extends cdk.Stack {
       access: { read: ['households', 'members'] },
     });
 
+    // === Phase 2: 料金カタログ / 課金 / 請求書 ===
+
+    this.registerEndpoint({
+      id: 'CatalogCreateFn',
+      handler: 'handlers.catalog.create.handler',
+      resourcePath: ['catalog', 'items'],
+      method: 'POST',
+      access: { write: ['itemCatalog', 'auditLog'] },
+    });
+
+    this.registerEndpoint({
+      id: 'CatalogListFn',
+      handler: 'handlers.catalog.list.handler',
+      resourcePath: ['catalog', 'items'],
+      method: 'GET',
+      access: { read: ['itemCatalog'] },
+    });
+
+    this.registerEndpoint({
+      id: 'ChargesCreateFn',
+      handler: 'handlers.charges.create.handler',
+      resourcePath: ['charges'],
+      method: 'POST',
+      access: {
+        read: ['households', 'itemCatalog'],
+        write: ['ledger', 'auditLog'],
+      },
+    });
+
+    this.registerEndpoint({
+      id: 'BillingGenerateFn',
+      handler: 'handlers.billing.generate.handler',
+      resourcePath: ['billing', 'generate'],
+      method: 'POST',
+      access: {
+        read: ['ledger'],
+        write: ['invoices', 'auditLog'],
+      },
+    });
+
+    this.registerEndpoint({
+      id: 'InvoicesByHouseholdFn',
+      handler: 'handlers.invoices.list_by_household.handler',
+      resourcePath: ['households', '{household_id}', 'invoices'],
+      method: 'GET',
+      access: { read: ['households', 'invoices'] },
+    });
+
     new cdk.CfnOutput(this, 'ApiUrl', { value: this.api.url });
   }
 
@@ -140,6 +191,9 @@ export class ApiStack extends cdk.Stack {
         HOUSEHOLDS_TABLE: this.tables.households.tableName,
         MEMBERS_TABLE: this.tables.members.tableName,
         AUDIT_LOG_TABLE: this.tables.auditLog.tableName,
+        ITEM_CATALOG_TABLE: this.tables.itemCatalog.tableName,
+        LEDGER_TABLE: this.tables.ledger.tableName,
+        INVOICES_TABLE: this.tables.invoices.tableName,
       },
       timeout: cdk.Duration.seconds(10),
       memorySize: 256,

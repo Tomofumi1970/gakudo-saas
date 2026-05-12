@@ -22,6 +22,9 @@ export class DatabaseStack extends cdk.Stack {
   public readonly householdsTable: dynamodb.Table;
   public readonly membersTable: dynamodb.Table;
   public readonly auditLogTable: dynamodb.Table;
+  public readonly itemCatalogTable: dynamodb.Table;
+  public readonly ledgerTable: dynamodb.Table;
+  public readonly invoicesTable: dynamodb.Table;
 
   constructor(scope: Construct, id: string, props: DatabaseStackProps) {
     super(scope, id, props);
@@ -122,6 +125,65 @@ export class DatabaseStack extends cdk.Stack {
       indexName: 'gsi1-actor-timestamp',
       partitionKey: { name: 'actor_user_id', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'timestamp', type: dynamodb.AttributeType.STRING },
+    });
+
+    // ItemCatalog: 料金品目カタログ(spec.md §5.1)
+    // PK: org_id, SK: item_id
+    // GSI1: billing_unit_type + category (請求単位ごとの品目絞り込み)
+    this.itemCatalogTable = new dynamodb.Table(this, 'ItemCatalogTable', {
+      tableName: `${prefix}-item-catalog`,
+      partitionKey: { name: 'org_id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'item_id', type: dynamodb.AttributeType.STRING },
+      ...common,
+    });
+    this.itemCatalogTable.addGlobalSecondaryIndex({
+      indexName: 'gsi1-billing-category',
+      partitionKey: {
+        name: 'billing_unit_type',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: { name: 'category', type: dynamodb.AttributeType.STRING },
+    });
+
+    // Ledger: 課金/返金/訂正の追記台帳(spec.md §5.2)
+    // PK: org_id#billing_unit (例: ORG_himawari#MONTH#2026-05)
+    // SK: ledger_entry_id (created_at プレフィックスで時系列ソート可能に)
+    // GSI1: household_id + billing_unit (世帯×請求単位の集計)
+    // GSI2: org_id + created_at (テナント横断時系列、運営者向け)
+    this.ledgerTable = new dynamodb.Table(this, 'LedgerTable', {
+      tableName: `${prefix}-ledger`,
+      partitionKey: {
+        name: 'org_billing_unit',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: { name: 'ledger_entry_id', type: dynamodb.AttributeType.STRING },
+      ...common,
+    });
+    this.ledgerTable.addGlobalSecondaryIndex({
+      indexName: 'gsi1-household-billing',
+      partitionKey: { name: 'household_id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'billing_unit', type: dynamodb.AttributeType.STRING },
+    });
+
+    // Invoices: 請求書スナップショット(spec.md §5.2)
+    // PK: org_id#household_id, SK: billing_unit (例: MONTH#2026-05)
+    // GSI1: org_billing_unit + status (請求単位ごとのステータス別)
+    this.invoicesTable = new dynamodb.Table(this, 'InvoicesTable', {
+      tableName: `${prefix}-invoices`,
+      partitionKey: {
+        name: 'org_household',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: { name: 'billing_unit', type: dynamodb.AttributeType.STRING },
+      ...common,
+    });
+    this.invoicesTable.addGlobalSecondaryIndex({
+      indexName: 'gsi1-orgbilling-status',
+      partitionKey: {
+        name: 'org_billing_unit',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: { name: 'status', type: dynamodb.AttributeType.STRING },
     });
 
     new cdk.CfnOutput(this, 'OrganizationsTableName', {
