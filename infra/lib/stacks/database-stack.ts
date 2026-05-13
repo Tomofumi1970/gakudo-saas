@@ -31,6 +31,8 @@ export class DatabaseStack extends cdk.Stack {
   public readonly contractsTable: dynamodb.Table;
   public readonly timeEntriesTable: dynamodb.Table;
   public readonly payrollRunsTable: dynamodb.Table;
+  public readonly attendanceTable: dynamodb.Table;
+  public readonly announcementsTable: dynamodb.Table;
 
   constructor(scope: Construct, id: string, props: DatabaseStackProps) {
     super(scope, id, props);
@@ -277,6 +279,33 @@ export class DatabaseStack extends cdk.Stack {
       indexName: 'gsi1-orgperiod-status',
       partitionKey: { name: 'org_period', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'status', type: dynamodb.AttributeType.STRING },
+    });
+
+    // === Phase 6.1: 出席管理 / お知らせ配信 ===
+
+    // Attendance: 出席記録(児童・指導員)
+    // PK: org_id#date, SK: member_id
+    // GSI1: org_member + work_date (個人の出席履歴)
+    this.attendanceTable = new dynamodb.Table(this, 'AttendanceTable', {
+      tableName: `${prefix}-attendance`,
+      partitionKey: { name: 'org_date', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'member_id', type: dynamodb.AttributeType.STRING },
+      ...common,
+    });
+    this.attendanceTable.addGlobalSecondaryIndex({
+      indexName: 'gsi1-orgmember-date',
+      partitionKey: { name: 'org_member', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'work_date', type: dynamodb.AttributeType.STRING },
+    });
+
+    // Announcements: お知らせ
+    // PK: org_id, SK: announcement_id
+    // GSI1: target_audience + sent_at (受信者別の時系列、参照用)
+    this.announcementsTable = new dynamodb.Table(this, 'AnnouncementsTable', {
+      tableName: `${prefix}-announcements`,
+      partitionKey: { name: 'org_id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'announcement_id', type: dynamodb.AttributeType.STRING },
+      ...common,
     });
 
     new cdk.CfnOutput(this, 'OrganizationsTableName', {

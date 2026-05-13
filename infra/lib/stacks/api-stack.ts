@@ -23,6 +23,8 @@ export interface ApiStackTables {
   contracts: dynamodb.Table;
   timeEntries: dynamodb.Table;
   payrollRuns: dynamodb.Table;
+  attendance: dynamodb.Table;
+  announcements: dynamodb.Table;
 }
 
 export interface ApiStackProps extends cdk.StackProps {
@@ -318,6 +320,60 @@ export class ApiStack extends cdk.Stack {
       },
     });
 
+    // === Phase 6.1: 出席 / お知らせ ===
+
+    this.registerEndpoint({
+      id: 'AttendanceUpsertFn',
+      handler: 'handlers.attendance.upsert.handler',
+      resourcePath: ['attendance'],
+      method: 'POST',
+      access: { write: ['attendance', 'auditLog'] },
+    });
+
+    this.registerEndpoint({
+      id: 'AttendanceListByDateFn',
+      handler: 'handlers.attendance.list_by_date.handler',
+      resourcePath: ['attendance'],
+      method: 'GET',
+      access: { read: ['attendance'] },
+    });
+
+    this.registerEndpoint({
+      id: 'AttendanceListByMemberFn',
+      handler: 'handlers.attendance.list_by_member.handler',
+      resourcePath: ['members', '{member_id}', 'attendance'],
+      method: 'GET',
+      access: { read: ['attendance'] },
+    });
+
+    this.registerEndpoint({
+      id: 'AnnouncementsCreateFn',
+      handler: 'handlers.announcements.create.handler',
+      resourcePath: ['announcements'],
+      method: 'POST',
+      access: { write: ['announcements', 'auditLog'] },
+    });
+
+    this.registerEndpoint({
+      id: 'AnnouncementsSendFn',
+      handler: 'handlers.announcements.send.handler',
+      resourcePath: ['announcements', '{announcement_id}', 'send'],
+      method: 'POST',
+      access: {
+        read: ['announcements', 'members'],
+        write: ['announcements', 'auditLog'],
+        sendEmail: true,
+      },
+    });
+
+    this.registerEndpoint({
+      id: 'MeAnnouncementsFn',
+      handler: 'handlers.me.announcements.handler',
+      resourcePath: ['me', 'announcements'],
+      method: 'GET',
+      access: { read: ['announcements'] },
+    });
+
     new cdk.CfnOutput(this, 'ApiUrl', { value: this.api.url });
   }
 
@@ -352,6 +408,8 @@ export class ApiStack extends cdk.Stack {
         CONTRACTS_TABLE: this.tables.contracts.tableName,
         TIME_ENTRIES_TABLE: this.tables.timeEntries.tableName,
         PAYROLL_RUNS_TABLE: this.tables.payrollRuns.tableName,
+        ATTENDANCE_TABLE: this.tables.attendance.tableName,
+        ANNOUNCEMENTS_TABLE: this.tables.announcements.tableName,
         FROM_EMAIL: this.fromEmail,
       },
       timeout: cdk.Duration.seconds(10),
