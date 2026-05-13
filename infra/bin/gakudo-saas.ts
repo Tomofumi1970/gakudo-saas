@@ -4,6 +4,7 @@ import { DatabaseStack } from '../lib/stacks/database-stack';
 import { AuthStack } from '../lib/stacks/auth-stack';
 import { ApiStack } from '../lib/stacks/api-stack';
 import { NotificationStack } from '../lib/stacks/notification-stack';
+import { FrontendStack } from '../lib/stacks/frontend-stack';
 
 const app = new cdk.App();
 
@@ -67,3 +68,15 @@ tagAll(api);
 api.addDependency(auth);
 api.addDependency(db);
 api.addDependency(notification);
+
+const frontend = new FrontendStack(app, `GakudoSaas-Frontend-${envName}`, {
+  envName,
+  env,
+  userPoolId: auth.userPool.userPoolId,
+  userPoolClientId: auth.userPoolClient.userPoolClientId,
+  apiUrl: api.api.url,
+  region: env.region!,
+});
+tagAll(frontend);
+frontend.addDependency(auth);
+frontend.addDependency(api);

@@ -57,8 +57,9 @@ export class AuthStack extends cdk.Stack {
     this.userPoolClient = this.userPool.addClient('WebClient', {
       userPoolClientName: `${prefix}-web-client`,
       authFlows: {
+        // SPA から amazon-cognito-identity-js を経由して SRP/PASSWORD どちらでも使える
         userSrp: true,
-        userPassword: false, // SRPのみ(セキュア)
+        userPassword: true, // 開発便宜のため。本番では SRP のみに戻す検討
       },
       preventUserExistenceErrors: true,
       idTokenValidity: cdk.Duration.hours(1),
