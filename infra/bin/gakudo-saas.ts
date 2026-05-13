@@ -5,6 +5,7 @@ import { AuthStack } from '../lib/stacks/auth-stack';
 import { ApiStack } from '../lib/stacks/api-stack';
 import { NotificationStack } from '../lib/stacks/notification-stack';
 import { FrontendStack } from '../lib/stacks/frontend-stack';
+import { StorageStack } from '../lib/stacks/storage-stack';
 
 const app = new cdk.App();
 
@@ -39,6 +40,12 @@ const notification = new NotificationStack(app, `GakudoSaas-Notification-${envNa
 });
 tagAll(notification);
 
+const storage = new StorageStack(app, `GakudoSaas-Storage-${envName}`, {
+  envName,
+  env,
+});
+tagAll(storage);
+
 const api = new ApiStack(app, `GakudoSaas-Api-${envName}`, {
   envName,
   env,
@@ -62,12 +69,16 @@ const api = new ApiStack(app, `GakudoSaas-Api-${envName}`, {
     payrollRuns: db.payrollRunsTable,
     attendance: db.attendanceTable,
     announcements: db.announcementsTable,
+    meetingMinutes: db.meetingMinutesTable,
+    documents: db.documentsTable,
   },
+  documentsBucket: storage.documentsBucket,
 });
 tagAll(api);
 api.addDependency(auth);
 api.addDependency(db);
 api.addDependency(notification);
+api.addDependency(storage);
 
 const frontend = new FrontendStack(app, `GakudoSaas-Frontend-${envName}`, {
   envName,

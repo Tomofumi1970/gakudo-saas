@@ -33,6 +33,8 @@ export class DatabaseStack extends cdk.Stack {
   public readonly payrollRunsTable: dynamodb.Table;
   public readonly attendanceTable: dynamodb.Table;
   public readonly announcementsTable: dynamodb.Table;
+  public readonly meetingMinutesTable: dynamodb.Table;
+  public readonly documentsTable: dynamodb.Table;
 
   constructor(scope: Construct, id: string, props: DatabaseStackProps) {
     super(scope, id, props);
@@ -306,6 +308,47 @@ export class DatabaseStack extends cdk.Stack {
       partitionKey: { name: 'org_id', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'announcement_id', type: dynamodb.AttributeType.STRING },
       ...common,
+    });
+
+    // === Phase 6.2: 議事録 / 規程文書 ===
+
+    // MeetingMinutes: 議事録
+    // PK: org_id, SK: minute_id
+    // GSI1: meeting_type + meeting_date(種別ごとの時系列)
+    this.meetingMinutesTable = new dynamodb.Table(this, 'MeetingMinutesTable', {
+      tableName: `${prefix}-meeting-minutes`,
+      partitionKey: { name: 'org_id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'minute_id', type: dynamodb.AttributeType.STRING },
+      ...common,
+    });
+    this.meetingMinutesTable.addGlobalSecondaryIndex({
+      indexName: 'gsi1-type-date',
+      partitionKey: {
+        name: 'meeting_type',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: { name: 'meeting_date', type: dynamodb.AttributeType.STRING },
+    });
+
+    // Documents: 規程文書のメタデータ(本体は S3)
+    // PK: org_id#doc_key, SK: version(YYYY-MM-DD#seq)
+    // GSI1: org_doctype + status(種別×ステータスで最新版を引く)
+    this.documentsTable = new dynamodb.Table(this, 'DocumentsTable', {
+      tableName: `${prefix}-documents`,
+      partitionKey: {
+        name: 'org_doc_key',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: { name: 'version', type: dynamodb.AttributeType.STRING },
+      ...common,
+    });
+    this.documentsTable.addGlobalSecondaryIndex({
+      indexName: 'gsi1-doctype-status',
+      partitionKey: {
+        name: 'org_doc_type',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: { name: 'status', type: dynamodb.AttributeType.STRING },
     });
 
     new cdk.CfnOutput(this, 'OrganizationsTableName', {

@@ -4,6 +4,7 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as s3 from 'aws-cdk-lib/aws-s3';
 import { Construct } from 'constructs';
 import * as path from 'path';
 
@@ -25,6 +26,8 @@ export interface ApiStackTables {
   payrollRuns: dynamodb.Table;
   attendance: dynamodb.Table;
   announcements: dynamodb.Table;
+  meetingMinutes: dynamodb.Table;
+  documents: dynamodb.Table;
 }
 
 export interface ApiStackProps extends cdk.StackProps {
@@ -33,6 +36,8 @@ export interface ApiStackProps extends cdk.StackProps {
   tables: ApiStackTables;
   /** SES 送信元(NotificationStack で verify 済の前提)。 */
   fromEmail: string;
+  /** 規程文書ストレージ。 */
+  documentsBucket: s3.IBucket;
 }
 
 interface AccessSpec {
@@ -40,6 +45,8 @@ interface AccessSpec {
   write?: (keyof ApiStackTables)[];
   /** SES:SendEmail / SendRawEmail 権限を Lambda に付与する。 */
   sendEmail?: boolean;
+  /** documentsBucket への read/write を Lambda に付与する。 */
+  docsBucket?: 'read' | 'write';
 }
 
 /**
@@ -56,6 +63,7 @@ export class ApiStack extends cdk.Stack {
   private readonly envName: string;
   private readonly assetCode: lambda.AssetCode;
   private readonly fromEmail: string;
+  private readonly documentsBucket: s3.IBucket;
 
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
@@ -63,6 +71,7 @@ export class ApiStack extends cdk.Stack {
     this.envName = props.envName;
     this.tables = props.tables;
     this.fromEmail = props.fromEmail;
+    this.documentsBucket = props.documentsBucket;
     const prefix = `gakudo-saas-${props.envName}`;
 
     this.api = new apigw.RestApi(this, 'RestApi', {
@@ -374,6 +383,72 @@ export class ApiStack extends cdk.Stack {
       access: { read: ['announcements'] },
     });
 
+    // === Phase 6.2: 議事録 / 規程文書 ===
+
+    this.registerEndpoint({
+      id: 'MeetingsCreateFn',
+      handler: 'handlers.meetings.create.handler',
+      resourcePath: ['meetings'],
+      method: 'POST',
+      access: { write: ['meetingMinutes', 'auditLog'] },
+    });
+
+    this.registerEndpoint({
+      id: 'MeetingsListFn',
+      handler: 'handlers.meetings.list.handler',
+      resourcePath: ['meetings'],
+      method: 'GET',
+      access: { read: ['meetingMinutes'] },
+    });
+
+    this.registerEndpoint({
+      id: 'MeetingsPublishFn',
+      handler: 'handlers.meetings.publish.handler',
+      resourcePath: ['meetings', '{minute_id}', 'publish'],
+      method: 'POST',
+      access: { write: ['meetingMinutes', 'auditLog'] },
+    });
+
+    this.registerEndpoint({
+      id: 'MeMeetingsFn',
+      handler: 'handlers.me.meetings.handler',
+      resourcePath: ['me', 'meetings'],
+      method: 'GET',
+      access: { read: ['meetingMinutes'] },
+    });
+
+    this.registerEndpoint({
+      id: 'DocumentsUploadUrlFn',
+      handler: 'handlers.documents.upload_url.handler',
+      resourcePath: ['documents', 'upload-url'],
+      method: 'POST',
+      access: { docsBucket: 'write' },
+    });
+
+    this.registerEndpoint({
+      id: 'DocumentsRegisterFn',
+      handler: 'handlers.documents.register.handler',
+      resourcePath: ['documents'],
+      method: 'POST',
+      access: { write: ['documents', 'auditLog'] },
+    });
+
+    this.registerEndpoint({
+      id: 'DocumentsListFn',
+      handler: 'handlers.documents.list.handler',
+      resourcePath: ['documents'],
+      method: 'GET',
+      access: { read: ['documents'] },
+    });
+
+    this.registerEndpoint({
+      id: 'DocumentsDownloadUrlFn',
+      handler: 'handlers.documents.download_url.handler',
+      resourcePath: ['documents', '{doc_key}', 'download-url'],
+      method: 'GET',
+      access: { read: ['documents'], docsBucket: 'read' },
+    });
+
     new cdk.CfnOutput(this, 'ApiUrl', { value: this.api.url });
   }
 
@@ -410,6 +485,9 @@ export class ApiStack extends cdk.Stack {
         PAYROLL_RUNS_TABLE: this.tables.payrollRuns.tableName,
         ATTENDANCE_TABLE: this.tables.attendance.tableName,
         ANNOUNCEMENTS_TABLE: this.tables.announcements.tableName,
+        MEETING_MINUTES_TABLE: this.tables.meetingMinutes.tableName,
+        DOCUMENTS_TABLE: this.tables.documents.tableName,
+        DOCUMENTS_BUCKET: this.documentsBucket.bucketName,
         FROM_EMAIL: this.fromEmail,
       },
       timeout: cdk.Duration.seconds(10),
@@ -429,6 +507,11 @@ export class ApiStack extends cdk.Stack {
           resources: ['*'],
         }),
       );
+    }
+    if (opts.access.docsBucket === 'read') {
+      this.documentsBucket.grantRead(fn);
+    } else if (opts.access.docsBucket === 'write') {
+      this.documentsBucket.grantReadWrite(fn);
     }
 
     // パスを辿って Resource をネスト構築
