@@ -34,6 +34,7 @@ class Caller:
     email: str | None
     org_id: str
     user_type: str | None
+    household_id: str | None  # 保護者(user_type=parent)のみ
 
 
 class HttpError(Exception):
@@ -62,6 +63,7 @@ def caller_from_event(event: dict[str, Any]) -> Caller:
         email=c.get("email"),
         org_id=org_id,
         user_type=c.get("custom:user_type"),
+        household_id=c.get("custom:household_id") or None,
     )
 
 

@@ -39,6 +39,8 @@ export class AuthStack extends cdk.Stack {
         org_id: new cognito.StringAttribute({ minLen: 1, maxLen: 64, mutable: false }),
         // ユーザー種別: staff | parent | operator
         user_type: new cognito.StringAttribute({ minLen: 1, maxLen: 32, mutable: true }),
+        // 保護者ログイン時の所属世帯(parent のみ)
+        household_id: new cognito.StringAttribute({ minLen: 0, maxLen: 64, mutable: true }),
       },
       passwordPolicy: {
         minLength: 10,

@@ -3,6 +3,7 @@ import * as cdk from 'aws-cdk-lib/core';
 import { DatabaseStack } from '../lib/stacks/database-stack';
 import { AuthStack } from '../lib/stacks/auth-stack';
 import { ApiStack } from '../lib/stacks/api-stack';
+import { NotificationStack } from '../lib/stacks/notification-stack';
 
 const app = new cdk.App();
 
@@ -30,10 +31,18 @@ const auth = new AuthStack(app, `GakudoSaas-Auth-${envName}`, {
 });
 tagAll(auth);
 
+const notification = new NotificationStack(app, `GakudoSaas-Notification-${envName}`, {
+  envName,
+  env,
+  fromEmail: (app.node.tryGetContext('fromEmail') as string) ?? 'torii@thinkfactory.co.jp',
+});
+tagAll(notification);
+
 const api = new ApiStack(app, `GakudoSaas-Api-${envName}`, {
   envName,
   env,
   userPool: auth.userPool,
+  fromEmail: notification.fromEmail,
   tables: {
     organizations: db.organizationsTable,
     users: db.usersTable,
@@ -51,3 +60,4 @@ const api = new ApiStack(app, `GakudoSaas-Api-${envName}`, {
 tagAll(api);
 api.addDependency(auth);
 api.addDependency(db);
+api.addDependency(notification);

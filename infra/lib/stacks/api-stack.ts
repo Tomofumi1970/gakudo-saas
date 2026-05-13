@@ -3,6 +3,7 @@ import * as apigw from 'aws-cdk-lib/aws-apigateway';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 import * as path from 'path';
 
@@ -24,11 +25,15 @@ export interface ApiStackProps extends cdk.StackProps {
   envName: 'stg' | 'prod';
   userPool: cognito.UserPool;
   tables: ApiStackTables;
+  /** SES 送信元(NotificationStack で verify 済の前提)。 */
+  fromEmail: string;
 }
 
 interface AccessSpec {
   read?: (keyof ApiStackTables)[];
   write?: (keyof ApiStackTables)[];
+  /** SES:SendEmail / SendRawEmail 権限を Lambda に付与する。 */
+  sendEmail?: boolean;
 }
 
 /**
@@ -44,12 +49,14 @@ export class ApiStack extends cdk.Stack {
   private readonly tables: ApiStackTables;
   private readonly envName: string;
   private readonly assetCode: lambda.AssetCode;
+  private readonly fromEmail: string;
 
   constructor(scope: Construct, id: string, props: ApiStackProps) {
     super(scope, id, props);
 
     this.envName = props.envName;
     this.tables = props.tables;
+    this.fromEmail = props.fromEmail;
     const prefix = `gakudo-saas-${props.envName}`;
 
     this.api = new apigw.RestApi(this, 'RestApi', {
@@ -208,6 +215,54 @@ export class ApiStack extends cdk.Stack {
       },
     });
 
+    // === Phase 4: 保護者向け自分用 + 請求書発行/消込 ===
+
+    this.registerEndpoint({
+      id: 'MeHouseholdFn',
+      handler: 'handlers.me.household.handler',
+      resourcePath: ['me', 'household'],
+      method: 'GET',
+      access: { read: ['households', 'members'] },
+    });
+
+    this.registerEndpoint({
+      id: 'MeInvoicesFn',
+      handler: 'handlers.me.invoices.handler',
+      resourcePath: ['me', 'invoices'],
+      method: 'GET',
+      access: { read: ['invoices'] },
+    });
+
+    this.registerEndpoint({
+      id: 'InvoicesIssueFn',
+      handler: 'handlers.invoices.issue.handler',
+      resourcePath: [
+        'invoices',
+        '{household_id}',
+        '{billing_unit}',
+        'issue',
+      ],
+      method: 'POST',
+      access: {
+        read: ['members'],
+        write: ['invoices', 'auditLog'],
+        sendEmail: true,
+      },
+    });
+
+    this.registerEndpoint({
+      id: 'InvoicesMarkPaidFn',
+      handler: 'handlers.invoices.mark_paid.handler',
+      resourcePath: [
+        'invoices',
+        '{household_id}',
+        '{billing_unit}',
+        'mark-paid',
+      ],
+      method: 'POST',
+      access: { write: ['invoices', 'auditLog'] },
+    });
+
     new cdk.CfnOutput(this, 'ApiUrl', { value: this.api.url });
   }
 
@@ -238,6 +293,7 @@ export class ApiStack extends cdk.Stack {
         INVOICES_TABLE: this.tables.invoices.tableName,
         EVENTS_TABLE: this.tables.events.tableName,
         EVENT_PARTICIPANTS_TABLE: this.tables.eventParticipants.tableName,
+        FROM_EMAIL: this.fromEmail,
       },
       timeout: cdk.Duration.seconds(10),
       memorySize: 256,
@@ -248,6 +304,14 @@ export class ApiStack extends cdk.Stack {
     }
     for (const t of opts.access.write ?? []) {
       this.tables[t].grantReadWriteData(fn);
+    }
+    if (opts.access.sendEmail) {
+      fn.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['ses:SendEmail', 'ses:SendRawEmail'],
+          resources: ['*'],
+        }),
+      );
     }
 
     // パスを辿って Resource をネスト構築
