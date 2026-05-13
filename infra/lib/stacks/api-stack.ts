@@ -19,6 +19,10 @@ export interface ApiStackTables {
   invoices: dynamodb.Table;
   events: dynamodb.Table;
   eventParticipants: dynamodb.Table;
+  staff: dynamodb.Table;
+  contracts: dynamodb.Table;
+  timeEntries: dynamodb.Table;
+  payrollRuns: dynamodb.Table;
 }
 
 export interface ApiStackProps extends cdk.StackProps {
@@ -263,6 +267,57 @@ export class ApiStack extends cdk.Stack {
       access: { write: ['invoices', 'auditLog'] },
     });
 
+    // === Phase 5: 指導員・労務・給与計算 ===
+
+    this.registerEndpoint({
+      id: 'StaffCreateFn',
+      handler: 'handlers.staff.create.handler',
+      resourcePath: ['staff'],
+      method: 'POST',
+      access: { write: ['staff', 'auditLog'] },
+    });
+
+    this.registerEndpoint({
+      id: 'StaffListFn',
+      handler: 'handlers.staff.list.handler',
+      resourcePath: ['staff'],
+      method: 'GET',
+      access: { read: ['staff'] },
+    });
+
+    this.registerEndpoint({
+      id: 'ContractsCreateFn',
+      handler: 'handlers.contracts.create.handler',
+      resourcePath: ['staff', '{staff_id}', 'contracts'],
+      method: 'POST',
+      access: {
+        read: ['staff'],
+        write: ['contracts', 'auditLog'],
+      },
+    });
+
+    this.registerEndpoint({
+      id: 'TimeEntriesCreateFn',
+      handler: 'handlers.timeentries.create.handler',
+      resourcePath: ['staff', '{staff_id}', 'timeentries'],
+      method: 'POST',
+      access: {
+        read: ['staff'],
+        write: ['timeEntries', 'auditLog'],
+      },
+    });
+
+    this.registerEndpoint({
+      id: 'PayrollCalculateFn',
+      handler: 'handlers.payroll.calculate.handler',
+      resourcePath: ['payroll', 'calculate'],
+      method: 'POST',
+      access: {
+        read: ['staff', 'contracts', 'timeEntries'],
+        write: ['payrollRuns', 'auditLog'],
+      },
+    });
+
     new cdk.CfnOutput(this, 'ApiUrl', { value: this.api.url });
   }
 
@@ -293,6 +348,10 @@ export class ApiStack extends cdk.Stack {
         INVOICES_TABLE: this.tables.invoices.tableName,
         EVENTS_TABLE: this.tables.events.tableName,
         EVENT_PARTICIPANTS_TABLE: this.tables.eventParticipants.tableName,
+        STAFF_TABLE: this.tables.staff.tableName,
+        CONTRACTS_TABLE: this.tables.contracts.tableName,
+        TIME_ENTRIES_TABLE: this.tables.timeEntries.tableName,
+        PAYROLL_RUNS_TABLE: this.tables.payrollRuns.tableName,
         FROM_EMAIL: this.fromEmail,
       },
       timeout: cdk.Duration.seconds(10),

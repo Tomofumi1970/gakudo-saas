@@ -27,6 +27,10 @@ export class DatabaseStack extends cdk.Stack {
   public readonly invoicesTable: dynamodb.Table;
   public readonly eventsTable: dynamodb.Table;
   public readonly eventParticipantsTable: dynamodb.Table;
+  public readonly staffTable: dynamodb.Table;
+  public readonly contractsTable: dynamodb.Table;
+  public readonly timeEntriesTable: dynamodb.Table;
+  public readonly payrollRunsTable: dynamodb.Table;
 
   constructor(scope: Construct, id: string, props: DatabaseStackProps) {
     super(scope, id, props);
@@ -216,6 +220,63 @@ export class DatabaseStack extends cdk.Stack {
       indexName: 'gsi1-member-date',
       partitionKey: { name: 'member_id', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'event_date', type: dynamodb.AttributeType.STRING },
+    });
+
+    // === Phase 5: 指導員・労務・給与 ===
+
+    // Staff: 指導員マスタ
+    // PK: org_id, SK: staff_id
+    // GSI1: status + hired_at (在籍指導員一覧)
+    this.staffTable = new dynamodb.Table(this, 'StaffTable', {
+      tableName: `${prefix}-staff`,
+      partitionKey: { name: 'org_id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'staff_id', type: dynamodb.AttributeType.STRING },
+      ...common,
+    });
+    this.staffTable.addGlobalSecondaryIndex({
+      indexName: 'gsi1-status-hired',
+      partitionKey: { name: 'status', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'hired_at', type: dynamodb.AttributeType.STRING },
+    });
+
+    // EmploymentContract: 雇用契約(時系列、有効期間付き)
+    // PK: org_id#staff_id, SK: valid_from (時系列ソート)
+    // 契約タイプ: REGULAR(月給) | PART_TIME(時給)、各種手当を JSON で保持
+    this.contractsTable = new dynamodb.Table(this, 'ContractsTable', {
+      tableName: `${prefix}-contracts`,
+      partitionKey: { name: 'org_staff', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'valid_from', type: dynamodb.AttributeType.STRING },
+      ...common,
+    });
+
+    // TimeEntries: 勤怠記録(1日1人複数行可能)
+    // PK: org_id#staff_id, SK: entry_id (work_date プレフィックス)
+    // GSI1: org_date + staff_id (日別の出勤者一覧)
+    this.timeEntriesTable = new dynamodb.Table(this, 'TimeEntriesTable', {
+      tableName: `${prefix}-time-entries`,
+      partitionKey: { name: 'org_staff', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'entry_id', type: dynamodb.AttributeType.STRING },
+      ...common,
+    });
+    this.timeEntriesTable.addGlobalSecondaryIndex({
+      indexName: 'gsi1-orgdate-staff',
+      partitionKey: { name: 'org_date', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'staff_id', type: dynamodb.AttributeType.STRING },
+    });
+
+    // PayrollRun: 月次給与計算結果(スナップショット)
+    // PK: org_id#staff_id, SK: period (YYYY-MM)
+    // GSI1: org_period + status (期別の給与一覧、振込済管理)
+    this.payrollRunsTable = new dynamodb.Table(this, 'PayrollRunsTable', {
+      tableName: `${prefix}-payroll-runs`,
+      partitionKey: { name: 'org_staff', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'period', type: dynamodb.AttributeType.STRING },
+      ...common,
+    });
+    this.payrollRunsTable.addGlobalSecondaryIndex({
+      indexName: 'gsi1-orgperiod-status',
+      partitionKey: { name: 'org_period', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'status', type: dynamodb.AttributeType.STRING },
     });
 
     new cdk.CfnOutput(this, 'OrganizationsTableName', {

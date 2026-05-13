@@ -55,6 +55,10 @@ const api = new ApiStack(app, `GakudoSaas-Api-${envName}`, {
     invoices: db.invoicesTable,
     events: db.eventsTable,
     eventParticipants: db.eventParticipantsTable,
+    staff: db.staffTable,
+    contracts: db.contractsTable,
+    timeEntries: db.timeEntriesTable,
+    payrollRuns: db.payrollRunsTable,
   },
 });
 tagAll(api);
