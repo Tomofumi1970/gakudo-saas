@@ -449,6 +449,32 @@ export class ApiStack extends cdk.Stack {
       access: { read: ['documents'], docsBucket: 'read' },
     });
 
+    // === Phase 6.3: レポート ===
+
+    this.registerEndpoint({
+      id: 'ReportsMonthlyRevenueFn',
+      handler: 'handlers.reports.monthly_revenue.handler',
+      resourcePath: ['reports', 'monthly-revenue'],
+      method: 'GET',
+      access: { read: ['invoices'] },
+    });
+
+    this.registerEndpoint({
+      id: 'ReportsUnpaidFn',
+      handler: 'handlers.reports.unpaid.handler',
+      resourcePath: ['reports', 'unpaid'],
+      method: 'GET',
+      access: { read: ['invoices'] },
+    });
+
+    this.registerEndpoint({
+      id: 'ReportsEnrollmentFn',
+      handler: 'handlers.reports.enrollment.handler',
+      resourcePath: ['reports', 'enrollment'],
+      method: 'GET',
+      access: { read: ['members'] },
+    });
+
     new cdk.CfnOutput(this, 'ApiUrl', { value: this.api.url });
   }
 
