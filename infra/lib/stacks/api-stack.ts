@@ -47,6 +47,8 @@ interface AccessSpec {
   sendEmail?: boolean;
   /** documentsBucket への read/write を Lambda に付与する。 */
   docsBucket?: 'read' | 'write';
+  /** bedrock:InvokeModel 権限を Lambda に付与する。 */
+  bedrock?: boolean;
 }
 
 /**
@@ -475,6 +477,32 @@ export class ApiStack extends cdk.Stack {
       access: { read: ['members'] },
     });
 
+    // === Phase 7.1: AI支援(Bedrock Claude) ===
+
+    this.registerEndpoint({
+      id: 'MeetingsSummarizeFn',
+      handler: 'handlers.meetings.summarize.handler',
+      resourcePath: ['meetings', '{minute_id}', 'summarize'],
+      method: 'POST',
+      access: { write: ['meetingMinutes', 'auditLog'], bedrock: true },
+      timeoutSeconds: 60,
+      memorySize: 512,
+    });
+
+    this.registerEndpoint({
+      id: 'EventsHandoverFn',
+      handler: 'handlers.events.handover.handler',
+      resourcePath: ['events', '{event_id}', 'handover'],
+      method: 'POST',
+      access: {
+        read: ['eventParticipants'],
+        write: ['events', 'auditLog'],
+        bedrock: true,
+      },
+      timeoutSeconds: 90,
+      memorySize: 512,
+    });
+
     new cdk.CfnOutput(this, 'ApiUrl', { value: this.api.url });
   }
 
@@ -484,6 +512,8 @@ export class ApiStack extends cdk.Stack {
     resourcePath: string[]; // ['households', '{id}', 'members'] のように分解
     method: string;
     access: AccessSpec;
+    timeoutSeconds?: number; // 既定10秒、AI系は60〜120秒
+    memorySize?: number; // 既定256MB、AI系は512〜1024MB
   }) {
     const prefix = `gakudo-saas-${this.envName}`;
 
@@ -516,8 +546,8 @@ export class ApiStack extends cdk.Stack {
         DOCUMENTS_BUCKET: this.documentsBucket.bucketName,
         FROM_EMAIL: this.fromEmail,
       },
-      timeout: cdk.Duration.seconds(10),
-      memorySize: 256,
+      timeout: cdk.Duration.seconds(opts.timeoutSeconds ?? 10),
+      memorySize: opts.memorySize ?? 256,
     });
 
     for (const t of opts.access.read ?? []) {
@@ -538,6 +568,19 @@ export class ApiStack extends cdk.Stack {
       this.documentsBucket.grantRead(fn);
     } else if (opts.access.docsBucket === 'write') {
       this.documentsBucket.grantReadWrite(fn);
+    }
+    if (opts.access.bedrock) {
+      fn.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ['bedrock:InvokeModel'],
+          resources: [
+            // inference profile 経由(jp.anthropic.*, global.anthropic.*)
+            `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/*anthropic.*`,
+            // inference profile が指す実モデル(クロスリージョン)
+            `arn:aws:bedrock:*::foundation-model/anthropic.*`,
+          ],
+        }),
+      );
     }
 
     // パスを辿って Resource をネスト構築
