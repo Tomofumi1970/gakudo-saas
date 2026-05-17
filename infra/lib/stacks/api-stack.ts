@@ -629,6 +629,32 @@ export class ApiStack extends cdk.Stack {
       },
     });
 
+    // === Phase 11: 世帯マスタ UPDATE / GET ===
+
+    this.registerEndpoint({
+      id: 'HouseholdsUpdateFn',
+      handler: 'handlers.households.update.handler',
+      resourcePath: ['households', '{household_id}'],
+      method: 'PATCH',
+      access: { write: ['households', 'auditLog'] },
+    });
+
+    this.registerEndpoint({
+      id: 'MembersGetFn',
+      handler: 'handlers.members.get.handler',
+      resourcePath: ['members', '{member_id}'],
+      method: 'GET',
+      access: { read: ['members'] },
+    });
+
+    this.registerEndpoint({
+      id: 'MembersUpdateFn',
+      handler: 'handlers.members.update.handler',
+      resourcePath: ['members', '{member_id}'],
+      method: 'PATCH',
+      access: { write: ['members', 'auditLog'] },
+    });
+
     new cdk.CfnOutput(this, 'ApiUrl', { value: this.api.url });
   }
 

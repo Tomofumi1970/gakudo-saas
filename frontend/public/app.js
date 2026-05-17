@@ -530,6 +530,184 @@
     panel.appendChild(h('div', { id: 'r-result', class: 'info', style: 'margin-top:0.5rem' }));
   }
 
+  /* --- スタッフ: 世帯マスタ(全世帯+メンバー編集) --- */
+  async function renderHouseholdMaster(panel) {
+    panel.appendChild(h('h2', null, '世帯マスタ'));
+    panel.appendChild(h('p', { class: 'info' }, 'スタッフは自施設の全世帯と全メンバーを閲覧・編集できます。'));
+
+    try {
+      const houses = await api('GET', '/households');
+      if (!houses.items.length) {
+        panel.appendChild(h('div', { class: 'empty' }, '世帯がありません。'));
+      }
+
+      for (const house of houses.items) {
+        const card = h('section', { style: 'border:1px solid #d0d7de; border-radius:6px; padding:1rem; margin-bottom:1rem' });
+        const headerRow = h('div', { style: 'display:flex; justify-content:space-between; align-items:center' },
+          h('div', null, h('strong', null, house.address || '(住所未登録)'), ' ', h('span', { class: 'info', style: 'font-size:0.8rem' }, `TEL: ${house.phone || '-'} | id=${house.household_id.slice(0,8)}..`)),
+          h('div', null,
+            h('button', { class: 'ghost', onclick: () => window.__editHousehold(house.household_id) }, '世帯編集'),
+            ' ',
+            h('button', { class: 'ghost', onclick: () => window.__toggleMembers(house.household_id) }, 'メンバー表示'),
+          ),
+        );
+        card.appendChild(headerRow);
+        card.appendChild(h('div', { id: `hh-edit-${house.household_id}` }));
+        card.appendChild(h('div', { id: `hh-members-${house.household_id}` }));
+        panel.appendChild(card);
+      }
+    } catch (e) {
+      panel.appendChild(h('div', { class: 'error' }, e.message));
+    }
+  }
+
+  window.__editHousehold = (hid) => {
+    const wrap = document.getElementById(`hh-edit-${hid}`);
+    if (wrap.innerHTML) { wrap.innerHTML = ''; return; }
+    wrap.innerHTML = '';
+    api('GET', '/households').then(r => {
+      const ho = r.items.find(x => x.household_id === hid);
+      const form = h('div', { style: 'margin-top:1rem; padding:1rem; background:#f6f8fa; border-radius:4px' },
+        h('label', null, '住所'),
+        h('input', { id: `eh-addr-${hid}`, value: ho.address || '' }),
+        h('label', null, 'TEL'),
+        h('input', { id: `eh-phone-${hid}`, value: ho.phone || '' }),
+        h('label', null, 'メモ'),
+        h('input', { id: `eh-note-${hid}`, value: ho.note || '' }),
+        h('div', { style: 'margin-top:0.5rem' },
+          h('button', { class: 'primary', onclick: async () => {
+            try {
+              await api('PATCH', `/households/${encodeURIComponent(hid)}`, {
+                address: document.getElementById(`eh-addr-${hid}`).value,
+                phone: document.getElementById(`eh-phone-${hid}`).value,
+                note: document.getElementById(`eh-note-${hid}`).value,
+              });
+              alert('世帯を更新しました'); render();
+            } catch (e) { alert(e.message); }
+          }}, '保存'),
+        ),
+      );
+      wrap.appendChild(form);
+    });
+  };
+
+  window.__toggleMembers = async (hid) => {
+    const wrap = document.getElementById(`hh-members-${hid}`);
+    if (wrap.innerHTML) { wrap.innerHTML = ''; return; }
+    try {
+      const r = await api('GET', `/households/${encodeURIComponent(hid)}/members`);
+      wrap.appendChild(h('h3', { style: 'margin-top:1rem' }, `メンバー (${r.count}人)`));
+      if (!r.items.length) wrap.appendChild(h('div', { class: 'empty' }, 'メンバー未登録'));
+      else wrap.appendChild(tableOf(r.items, [
+        { label: '区分', key: 'member_type' },
+        { label: 'ステータス', key: 'status' },
+        { label: '姓', key: 'family_name' },
+        { label: '名', key: 'given_name' },
+        { label: '学年', render: (m) => m.grade || '-' },
+        { label: 'メール', render: (m) => m.email || '-' },
+        { label: 'TEL', render: (m) => m.phone || '-' },
+        { label: '操作', render: (m) => `<button class="ghost" onclick="window.__editMember('${m.member_id}', '${hid}')">編集</button>` },
+      ], ''));
+      // 新規メンバー追加フォーム
+      wrap.appendChild(h('h3', { style: 'margin-top:1rem' }, 'メンバー追加'));
+      wrap.appendChild(h('div', { class: 'row' },
+        h('div', null,
+          h('label', null, '区分'),
+          h('select', { id: `am-type-${hid}` },
+            h('option', { value: 'child' }, '児童'),
+            h('option', { value: 'guardian' }, '保護者'),
+            h('option', { value: 'sibling' }, '兄弟'),
+            h('option', { value: 'contact' }, '緊急連絡先'),
+          ),
+        ),
+        h('div', null,
+          h('label', null, 'ステータス'),
+          h('select', { id: `am-status-${hid}` },
+            ['ACTIVE','PROSPECTIVE','GRADUATED','WITHDRAWN','PRESCHOOL_GUEST','ALUMNI_GUEST','PRIMARY_GUARDIAN','SECONDARY_GUARDIAN','EMERGENCY_CONTACT']
+              .map(s => h('option', { value: s }, s)),
+          ),
+        ),
+      ));
+      wrap.appendChild(h('div', { class: 'row' },
+        h('div', null, h('label', null, '姓'), h('input', { id: `am-fn-${hid}` })),
+        h('div', null, h('label', null, '名'), h('input', { id: `am-gn-${hid}` })),
+      ));
+      wrap.appendChild(h('div', { class: 'row' },
+        h('div', null, h('label', null, '学年(児童のみ)'), h('input', { id: `am-grade-${hid}` })),
+        h('div', null, h('label', null, 'メール'), h('input', { id: `am-email-${hid}` })),
+      ));
+      wrap.appendChild(h('label', null, 'アレルギー・配慮事項'));
+      wrap.appendChild(h('input', { id: `am-aller-${hid}` }));
+      wrap.appendChild(h('div', { style: 'margin-top:0.5rem' },
+        h('button', { class: 'primary', onclick: async () => {
+          try {
+            await api('POST', `/households/${encodeURIComponent(hid)}/members`, {
+              member_type: document.getElementById(`am-type-${hid}`).value,
+              status: document.getElementById(`am-status-${hid}`).value,
+              family_name: document.getElementById(`am-fn-${hid}`).value,
+              given_name: document.getElementById(`am-gn-${hid}`).value,
+              grade: document.getElementById(`am-grade-${hid}`).value,
+              email: document.getElementById(`am-email-${hid}`).value,
+              allergies: document.getElementById(`am-aller-${hid}`).value,
+            });
+            window.__toggleMembers(hid); // 一度閉じて
+            window.__toggleMembers(hid); // 再表示
+          } catch (e) { alert(e.message); }
+        }}, '追加'),
+      ));
+    } catch (e) {
+      wrap.appendChild(h('div', { class: 'error' }, e.message));
+    }
+  };
+
+  window.__editMember = async (mid, hid) => {
+    try {
+      const m = await api('GET', `/members/${encodeURIComponent(mid)}`);
+      const dlg = h('section', { style: 'position:fixed; top:5%; left:50%; transform:translateX(-50%); background:white; border:1px solid #d0d7de; padding:1.5rem; border-radius:6px; max-width:600px; width:90%; box-shadow:0 4px 20px rgba(0,0,0,0.15); z-index:1000' },
+        h('h3', null, `${m.family_name} ${m.given_name} を編集`),
+        h('label', null, '姓'),
+        h('input', { id: 'em-fn', value: m.family_name || '' }),
+        h('label', null, '名'),
+        h('input', { id: 'em-gn', value: m.given_name || '' }),
+        h('label', null, 'ステータス'),
+        h('select', { id: 'em-status' },
+          ['ACTIVE','PROSPECTIVE','GRADUATED','WITHDRAWN','PRESCHOOL_GUEST','ALUMNI_GUEST','PRIMARY_GUARDIAN','SECONDARY_GUARDIAN','EMERGENCY_CONTACT']
+            .map(s => h('option', { value: s, selected: m.status === s ? 'selected' : null }, s)),
+        ),
+        h('label', null, '学年(空でクリア)'),
+        h('input', { id: 'em-grade', value: m.grade || '' }),
+        h('label', null, 'メール'),
+        h('input', { id: 'em-email', value: m.email || '' }),
+        h('label', null, 'TEL'),
+        h('input', { id: 'em-phone', value: m.phone || '' }),
+        h('label', null, 'アレルギー'),
+        h('input', { id: 'em-aller', value: m.allergies || '' }),
+        h('label', null, '配慮事項'),
+        h('input', { id: 'em-cons', value: m.considerations || '' }),
+        h('div', { style: 'margin-top:1rem; display:flex; gap:0.5rem' },
+          h('button', { class: 'primary', onclick: async () => {
+            try {
+              await api('PATCH', `/members/${encodeURIComponent(mid)}`, {
+                family_name: document.getElementById('em-fn').value,
+                given_name: document.getElementById('em-gn').value,
+                status: document.getElementById('em-status').value,
+                grade: document.getElementById('em-grade').value,
+                email: document.getElementById('em-email').value,
+                phone: document.getElementById('em-phone').value,
+                allergies: document.getElementById('em-aller').value,
+                considerations: document.getElementById('em-cons').value,
+              });
+              dlg.remove();
+              alert('保存しました'); render();
+            } catch (e) { alert(e.message); }
+          }}, '保存'),
+          h('button', { class: 'ghost', onclick: () => dlg.remove() }, 'キャンセル'),
+        ),
+      );
+      document.body.appendChild(dlg);
+    } catch (e) { alert(e.message); }
+  };
+
   /* --- スタッフ: 料金カタログ + 課金登録 + 月次請求生成 --- */
   async function renderBilling(panel) {
     panel.appendChild(h('h2', null, '料金カタログ'));
@@ -682,6 +860,7 @@
       { id: 'meetings', label: '議事録', staffOnly: false, fn: renderMeetings },
       { id: 'documents', label: '規程文書', staffOnly: false, fn: renderDocuments },
       { id: 'resolutions', label: '総会議決', staffOnly: false, fn: renderResolutions },
+      { id: 'household-master', label: '世帯マスタ', staffOnly: true, fn: renderHouseholdMaster },
       { id: 'announce-create', label: 'お知らせ作成', staffOnly: true, fn: renderAnnouncementsCreate },
       { id: 'attendance', label: '出席記録', staffOnly: true, fn: renderAttendance },
       { id: 'meeting-create', label: '議事録作成', staffOnly: true, fn: renderMeetingCreate },
