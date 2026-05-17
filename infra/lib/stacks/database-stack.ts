@@ -35,6 +35,8 @@ export class DatabaseStack extends cdk.Stack {
   public readonly announcementsTable: dynamodb.Table;
   public readonly meetingMinutesTable: dynamodb.Table;
   public readonly documentsTable: dynamodb.Table;
+  public readonly resolutionsTable: dynamodb.Table;
+  public readonly ballotsTable: dynamodb.Table;
 
   constructor(scope: Construct, id: string, props: DatabaseStackProps) {
     super(scope, id, props);
@@ -349,6 +351,38 @@ export class DatabaseStack extends cdk.Stack {
         type: dynamodb.AttributeType.STRING,
       },
       sortKey: { name: 'status', type: dynamodb.AttributeType.STRING },
+    });
+
+    // === Phase 7.2: 総会議決(Resolution + Ballot) ===
+
+    // Resolutions: 議案(=投票対象)
+    // PK: org_id, SK: resolution_id
+    // GSI1: assembly_id + order_no(総会単位の議案順序)
+    this.resolutionsTable = new dynamodb.Table(this, 'ResolutionsTable', {
+      tableName: `${prefix}-resolutions`,
+      partitionKey: { name: 'org_id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'resolution_id', type: dynamodb.AttributeType.STRING },
+      ...common,
+    });
+    this.resolutionsTable.addGlobalSecondaryIndex({
+      indexName: 'gsi1-assembly-order',
+      partitionKey: { name: 'assembly_id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'order_no', type: dynamodb.AttributeType.STRING },
+    });
+
+    // Ballots: 議決権行使(同 resolution × 同 household は1票で上書き)
+    // PK: org_id#resolution_id, SK: household_id
+    // GSI1: household_id + resolution_id(個人の投票履歴)
+    this.ballotsTable = new dynamodb.Table(this, 'BallotsTable', {
+      tableName: `${prefix}-ballots`,
+      partitionKey: { name: 'org_resolution', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'household_id', type: dynamodb.AttributeType.STRING },
+      ...common,
+    });
+    this.ballotsTable.addGlobalSecondaryIndex({
+      indexName: 'gsi1-household-resolution',
+      partitionKey: { name: 'household_id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'resolution_id', type: dynamodb.AttributeType.STRING },
     });
 
     new cdk.CfnOutput(this, 'OrganizationsTableName', {

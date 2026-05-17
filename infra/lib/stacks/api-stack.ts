@@ -28,6 +28,8 @@ export interface ApiStackTables {
   announcements: dynamodb.Table;
   meetingMinutes: dynamodb.Table;
   documents: dynamodb.Table;
+  resolutions: dynamodb.Table;
+  ballots: dynamodb.Table;
 }
 
 export interface ApiStackProps extends cdk.StackProps {
@@ -503,6 +505,40 @@ export class ApiStack extends cdk.Stack {
       memorySize: 512,
     });
 
+    // === Phase 7.2: 総会議決 ===
+
+    this.registerEndpoint({
+      id: 'ResolutionsCreateFn',
+      handler: 'handlers.resolutions.create.handler',
+      resourcePath: ['resolutions'],
+      method: 'POST',
+      access: { write: ['resolutions', 'auditLog'] },
+    });
+
+    this.registerEndpoint({
+      id: 'ResolutionsListFn',
+      handler: 'handlers.resolutions.list.handler',
+      resourcePath: ['resolutions'],
+      method: 'GET',
+      access: { read: ['resolutions'] },
+    });
+
+    this.registerEndpoint({
+      id: 'ResolutionsCastVoteFn',
+      handler: 'handlers.resolutions.cast_vote.handler',
+      resourcePath: ['resolutions', '{resolution_id}', 'votes'],
+      method: 'POST',
+      access: { read: ['resolutions'], write: ['ballots', 'auditLog'] },
+    });
+
+    this.registerEndpoint({
+      id: 'ResolutionsTallyFn',
+      handler: 'handlers.resolutions.tally.handler',
+      resourcePath: ['resolutions', '{resolution_id}', 'tally'],
+      method: 'GET',
+      access: { read: ['resolutions', 'ballots'] },
+    });
+
     new cdk.CfnOutput(this, 'ApiUrl', { value: this.api.url });
   }
 
@@ -543,6 +579,8 @@ export class ApiStack extends cdk.Stack {
         ANNOUNCEMENTS_TABLE: this.tables.announcements.tableName,
         MEETING_MINUTES_TABLE: this.tables.meetingMinutes.tableName,
         DOCUMENTS_TABLE: this.tables.documents.tableName,
+        RESOLUTIONS_TABLE: this.tables.resolutions.tableName,
+        BALLOTS_TABLE: this.tables.ballots.tableName,
         DOCUMENTS_BUCKET: this.documentsBucket.bucketName,
         FROM_EMAIL: this.fromEmail,
       },

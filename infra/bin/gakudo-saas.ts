@@ -71,6 +71,8 @@ const api = new ApiStack(app, `GakudoSaas-Api-${envName}`, {
     announcements: db.announcementsTable,
     meetingMinutes: db.meetingMinutesTable,
     documents: db.documentsTable,
+    resolutions: db.resolutionsTable,
+    ballots: db.ballotsTable,
   },
   documentsBucket: storage.documentsBucket,
 });
