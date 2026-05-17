@@ -32,6 +32,8 @@ export interface ApiStackTables {
   ballots: dynamodb.Table;
   applications: dynamodb.Table;
   withdrawals: dynamodb.Table;
+  shifts: dynamodb.Table;
+  bonusRuns: dynamodb.Table;
 }
 
 export interface ApiStackProps extends cdk.StackProps {
@@ -598,6 +600,35 @@ export class ApiStack extends cdk.Stack {
       },
     });
 
+    // === Phase 9: シフト / 賞与 ===
+
+    this.registerEndpoint({
+      id: 'ShiftsUpsertFn',
+      handler: 'handlers.shifts.upsert.handler',
+      resourcePath: ['shifts'],
+      method: 'POST',
+      access: { write: ['shifts', 'auditLog'] },
+    });
+
+    this.registerEndpoint({
+      id: 'ShiftsListFn',
+      handler: 'handlers.shifts.list_by_date.handler',
+      resourcePath: ['shifts'],
+      method: 'GET',
+      access: { read: ['shifts'] },
+    });
+
+    this.registerEndpoint({
+      id: 'BonusCalculateFn',
+      handler: 'handlers.bonus.calculate.handler',
+      resourcePath: ['bonuses', 'calculate'],
+      method: 'POST',
+      access: {
+        read: ['staff', 'contracts'],
+        write: ['bonusRuns', 'auditLog'],
+      },
+    });
+
     new cdk.CfnOutput(this, 'ApiUrl', { value: this.api.url });
   }
 
@@ -642,6 +673,8 @@ export class ApiStack extends cdk.Stack {
         BALLOTS_TABLE: this.tables.ballots.tableName,
         APPLICATIONS_TABLE: this.tables.applications.tableName,
         WITHDRAWALS_TABLE: this.tables.withdrawals.tableName,
+        SHIFTS_TABLE: this.tables.shifts.tableName,
+        BONUS_RUNS_TABLE: this.tables.bonusRuns.tableName,
         DOCUMENTS_BUCKET: this.documentsBucket.bucketName,
         FROM_EMAIL: this.fromEmail,
       },

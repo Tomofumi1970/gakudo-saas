@@ -39,6 +39,8 @@ export class DatabaseStack extends cdk.Stack {
   public readonly ballotsTable: dynamodb.Table;
   public readonly applicationsTable: dynamodb.Table;
   public readonly withdrawalsTable: dynamodb.Table;
+  public readonly shiftsTable: dynamodb.Table;
+  public readonly bonusRunsTable: dynamodb.Table;
 
   constructor(scope: Construct, id: string, props: DatabaseStackProps) {
     super(scope, id, props);
@@ -411,6 +413,27 @@ export class DatabaseStack extends cdk.Stack {
       indexName: 'gsi1-household-date',
       partitionKey: { name: 'household_id', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'submitted_at', type: dynamodb.AttributeType.STRING },
+    });
+
+    // === Phase 9: シフト管理 / 賞与 ===
+
+    this.shiftsTable = new dynamodb.Table(this, 'ShiftsTable', {
+      tableName: `${prefix}-shifts`,
+      partitionKey: { name: 'org_date', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'staff_id', type: dynamodb.AttributeType.STRING },
+      ...common,
+    });
+    this.shiftsTable.addGlobalSecondaryIndex({
+      indexName: 'gsi1-staff-date',
+      partitionKey: { name: 'org_staff', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'work_date', type: dynamodb.AttributeType.STRING },
+    });
+
+    this.bonusRunsTable = new dynamodb.Table(this, 'BonusRunsTable', {
+      tableName: `${prefix}-bonus-runs`,
+      partitionKey: { name: 'org_staff', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'bonus_key', type: dynamodb.AttributeType.STRING },
+      ...common,
     });
 
     new cdk.CfnOutput(this, 'OrganizationsTableName', {

@@ -75,6 +75,22 @@ class PayrollResult:
         return d
 
 
+def compute_bonus(
+    contract: Contract,
+    season: str,  # SUMMER | WINTER
+    rate_months: Decimal,
+) -> Decimal:
+    """賞与額(円)を算出。
+
+    ひまわり別表1: 夏季・冬季とも 2.0ヶ月分。基準日に在籍する正規指導員のみ対象、
+    パートは別表で「勤務状況等を考慮し寸志を支給することがある」とされ
+    自動算出対象外(ゼロ)。
+    """
+    if contract.contract_type != "REGULAR":
+        return Decimal("0")
+    return _round_yen(contract.base_salary_monthly * rate_months)
+
+
 def compute_payroll(
     contract: Contract, agg: TimeAggregate, period: str
 ) -> PayrollResult:
