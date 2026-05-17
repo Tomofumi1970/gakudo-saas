@@ -37,6 +37,8 @@ export class DatabaseStack extends cdk.Stack {
   public readonly documentsTable: dynamodb.Table;
   public readonly resolutionsTable: dynamodb.Table;
   public readonly ballotsTable: dynamodb.Table;
+  public readonly applicationsTable: dynamodb.Table;
+  public readonly withdrawalsTable: dynamodb.Table;
 
   constructor(scope: Construct, id: string, props: DatabaseStackProps) {
     super(scope, id, props);
@@ -383,6 +385,32 @@ export class DatabaseStack extends cdk.Stack {
       indexName: 'gsi1-household-resolution',
       partitionKey: { name: 'household_id', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'resolution_id', type: dynamodb.AttributeType.STRING },
+    });
+
+    // === Phase 8: 入所申込 / 退所届 ===
+
+    this.applicationsTable = new dynamodb.Table(this, 'ApplicationsTable', {
+      tableName: `${prefix}-applications`,
+      partitionKey: { name: 'org_id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'application_id', type: dynamodb.AttributeType.STRING },
+      ...common,
+    });
+    this.applicationsTable.addGlobalSecondaryIndex({
+      indexName: 'gsi1-status-submitted',
+      partitionKey: { name: 'status', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'submitted_at', type: dynamodb.AttributeType.STRING },
+    });
+
+    this.withdrawalsTable = new dynamodb.Table(this, 'WithdrawalsTable', {
+      tableName: `${prefix}-withdrawals`,
+      partitionKey: { name: 'org_id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'withdrawal_id', type: dynamodb.AttributeType.STRING },
+      ...common,
+    });
+    this.withdrawalsTable.addGlobalSecondaryIndex({
+      indexName: 'gsi1-household-date',
+      partitionKey: { name: 'household_id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'submitted_at', type: dynamodb.AttributeType.STRING },
     });
 
     new cdk.CfnOutput(this, 'OrganizationsTableName', {

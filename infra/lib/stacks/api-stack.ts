@@ -30,6 +30,8 @@ export interface ApiStackTables {
   documents: dynamodb.Table;
   resolutions: dynamodb.Table;
   ballots: dynamodb.Table;
+  applications: dynamodb.Table;
+  withdrawals: dynamodb.Table;
 }
 
 export interface ApiStackProps extends cdk.StackProps {
@@ -539,6 +541,63 @@ export class ApiStack extends cdk.Stack {
       access: { read: ['resolutions', 'ballots'] },
     });
 
+    // === Phase 8: 入所申込 / 退所届 ===
+
+    this.registerEndpoint({
+      id: 'ApplicationsSubmitFn',
+      handler: 'handlers.applications.submit.handler',
+      resourcePath: ['applications'],
+      method: 'POST',
+      access: { write: ['applications', 'auditLog'] },
+    });
+
+    this.registerEndpoint({
+      id: 'ApplicationsListFn',
+      handler: 'handlers.applications.list.handler',
+      resourcePath: ['applications'],
+      method: 'GET',
+      access: { read: ['applications'] },
+    });
+
+    this.registerEndpoint({
+      id: 'ApplicationsApproveFn',
+      handler: 'handlers.applications.approve.handler',
+      resourcePath: ['applications', '{application_id}', 'approve'],
+      method: 'POST',
+      access: {
+        write: ['applications', 'households', 'members', 'auditLog'],
+      },
+    });
+
+    this.registerEndpoint({
+      id: 'WithdrawalsSubmitFn',
+      handler: 'handlers.withdrawals.submit.handler',
+      resourcePath: ['withdrawals'],
+      method: 'POST',
+      access: {
+        read: ['members'],
+        write: ['withdrawals', 'auditLog'],
+      },
+    });
+
+    this.registerEndpoint({
+      id: 'WithdrawalsListFn',
+      handler: 'handlers.withdrawals.list.handler',
+      resourcePath: ['withdrawals'],
+      method: 'GET',
+      access: { read: ['withdrawals'] },
+    });
+
+    this.registerEndpoint({
+      id: 'WithdrawalsConfirmFn',
+      handler: 'handlers.withdrawals.confirm.handler',
+      resourcePath: ['withdrawals', '{withdrawal_id}', 'confirm'],
+      method: 'POST',
+      access: {
+        write: ['withdrawals', 'members', 'auditLog'],
+      },
+    });
+
     new cdk.CfnOutput(this, 'ApiUrl', { value: this.api.url });
   }
 
@@ -581,6 +640,8 @@ export class ApiStack extends cdk.Stack {
         DOCUMENTS_TABLE: this.tables.documents.tableName,
         RESOLUTIONS_TABLE: this.tables.resolutions.tableName,
         BALLOTS_TABLE: this.tables.ballots.tableName,
+        APPLICATIONS_TABLE: this.tables.applications.tableName,
+        WITHDRAWALS_TABLE: this.tables.withdrawals.tableName,
         DOCUMENTS_BUCKET: this.documentsBucket.bucketName,
         FROM_EMAIL: this.fromEmail,
       },
